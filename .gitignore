@@ -1,1 +1,4 @@
 /build
+bochs_config
+debug.sh
+*.ini
