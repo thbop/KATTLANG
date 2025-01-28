@@ -79,6 +79,39 @@ def _build_data_tree(expr: str):
         
     return data
 
+def _correct_data(data: dict):
+    new_data = []
+    new_scope_operations = '*/'
+    new_scope = False
+    for i, entry in enumerate(data):
+        if i == 0 and entry['type'] == TYPE_ARITHMETIC and entry['value'] != '-':
+            print('ERROR: Bad arithmetic')
+            return None
+        
+        if entry['type'] == TYPE_ARITHMETIC and entry['value'] in new_scope_operations:
+            lvalue = new_data.pop()
+            new_scope = True
+            new_data.append(
+                {
+                    'type': TYPE_SCOPE,
+                    'value': [lvalue, entry]
+                }
+            )
+        
+        elif new_scope:
+            if entry['type'] == TYPE_SCOPE:
+                new_data[-1]['value'].append({'type':TYPE_SCOPE, 'value':_correct_data(entry['value'])})
+            else:
+                new_data[-1]['value'].append(entry)
+            new_scope = False
+        elif entry['type'] == TYPE_SCOPE:
+            new_data.append({'type':TYPE_SCOPE, 'value':_correct_data(entry['value'])})
+        else:
+            new_data.append(data[i])
+    
+    return new_data
+
+
 def _handle_operation(lvalue, rvalue, operation):
     match operation:
         case '+':
@@ -118,14 +151,30 @@ def _evaluate(data: dict):
     
     return lvalue
 
+def _print_data(data: dict, depth=0):
+    for entry in data:
+        if entry['type'] == TYPE_INTEGER:
+            print(entry['value'], end='')
+        elif entry['type'] == TYPE_ARITHMETIC:
+            print(' '+entry['value'], end=' ')
+        elif entry['type'] == TYPE_SCOPE:
+            print('( ', end='')
+            _print_data(entry['value'], depth+1)
+            print(' )', end='')
+    
+    if depth == 0:
+        print()
 
 def evaluate(expr: str):
     data = _build_data_tree(expr)
-    print(data)
+    data = _correct_data(data)
+    _print_data(data)
     return _evaluate(data)
 
 
 if __name__ == '__main__':
-    expr = '-2 + 5 + (2 * (5+5))'
+    expr = '((2 + 3) * (7 - 4) + (15 / (3 + 2))) * (8 - (6 / 3) * (2 + 1)) - 10'
     result = evaluate(expr)
+    ground_truth = eval(expr)
     print(result)
+    print(ground_truth)
