@@ -8,8 +8,6 @@ TYPE_ARITHMETIC = 1
 TYPE_SCOPE = 2
 
 
-
-
 numerals = '0123456789'
 arithmetics = '+-*/'
 
@@ -173,7 +171,7 @@ def evaluate(expr: str):
 
 
 if __name__ == '__main__':
-    expr = '((2 + 3) * (7 - 4) + (15 / (3 + 2))) * (8 - (6 / 3) * (2 + 1)) - 10'
+    expr = '((12 / (2 + 4)) * (8 - 3) + (18 - (3 * 2))) / (5 + (6 / 2)) * 7 - 4'
     result = evaluate(expr)
     ground_truth = eval(expr)
     print(result)

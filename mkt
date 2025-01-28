@@ -1,0 +1,9 @@
+@global ASM nasm
+@global BUILD_DIR build
+@global SRC_DIR src
+
+#include src/boot
+
+@task make
+    !bootloader
+@end
