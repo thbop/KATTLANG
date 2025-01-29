@@ -4,5 +4,6 @@
     dd if=/dev/zero of={BUILD_DIR}/main_floppy.img bs=512 count=2880
     {ASM} {SRC_DIR}/boot/bootloader.asm -f bin -o {BUILD_DIR}/bootloader.bin
     dd if={BUILD_DIR}/bootloader.bin of={BUILD_DIR}/main_floppy.img conv=notrunc
+    dd if={BUILD_DIR}/thbop of={BUILD_DIR}/main_floppy.img bs=512 seek=1
 @end
 

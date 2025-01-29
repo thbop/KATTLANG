@@ -6,6 +6,8 @@ bits 16
 
 %define ENDL 0x0D, 0x0A
 
+LOAD_SEG:    equ 0x2000
+LOAD_OFFSET: equ 0
 
 jmp short start                       ; Thbop File System stuff (nothing really tbh)
 tfs_drive_number: db 0                ; Drive number
@@ -53,8 +55,17 @@ start:                                ; Boilerplate code
     and cl, 00111111b                 ; cl = sectors
     mov [tfs_sectors], cl             ; tfs_sectors = cl
 
+.load:
+    mov ax, 1                         ; Start loading the next sector
+    mov cl, 10                        ; Load an arbitrary 10 sectors - TODO: replace with a proper file system
+    mov dl, [tfs_drive_number]        ; dl = tfs_drive_number
+    mov bx, LOAD_SEG
+    mov es, bx
+    mov bx, LOAD_OFFSET               ; Output data at buffer label
+    call disk_read
 
-    
+    jmp LOAD_SEG:LOAD_OFFSET
+
     jmp wait_key_and_reboot
 
     cli
@@ -77,6 +88,10 @@ wait_key_and_reboot:
 .halt:
     cli                               ; Disable interrupts to prevent exiting the "halt" state
     jmp .halt
+
+;
+; Helper functions
+;
 
 ; Prints a string to the screen
 ; Args:
@@ -102,6 +117,101 @@ puts:
     pop si
     ret
 
+;
+; Converts LBA address to CHS address
+; Args:
+;     ax - LBA address
+; Returns:
+;     sector   -> cx (bits 0-5 from the right)
+;     cylinder -> cx (bits 6-15)
+;     head     -> dh
+lba_to_chs:                           ; Logical Block Addressing -> Cylinder Head Sector
+    push ax
+    push dx
+
+    xor dx, dx                        ; dx = 0
+    div word [tfs_sectors]            ; ax = LBA / SectorsPerTrack
+                                      ; dx = LBA % SectorsPerTrack
+    inc dx                            ; dx = (LBA % SectorsPerTrack + 1) = sector
+    mov cx, dx                        ; cx = sector
+
+    xor dx, dx                        ; dx = 0
+    div word [tfs_heads]              ; ax = (LBA / SectorsPerTrack) / Heads = cylinder
+                                      ; dx = (LBA / SectorsPerTrack) % Heads = head
+    mov dh, dl                        ; dh = head (dh = 8 high bits of dx, dl = low 8 bits of dx; high=left, low=right)
+    mov ch, al                        ; ch = lower 8 bits of cylinder
+    shl ah, 6                         ; shift into place
+    or  cl, ah                        ; place upper two bits of cylinder into the top of cl
+                                      ; CX =       ---CH--- ---CL---
+                                      ; cylinder : 76543210 98
+                                      ; sector   :            543210
+    pop ax                            ; ax = dl (from stack)
+    mov dl, al                        ; dl = ax
+    pop ax                            ; ax = ax (from stack)
+    ret
+
+;
+; Read sectors from a disk
+; Args
+;     ax    - LBA address
+;     cl    - number of sectors to read (up to 128)
+;     dl    - drive number
+;     es:bx - memory location to store read data (destination)
+disk_read:
+
+    push ax                           ; Save original values of registers we'll modify
+    push bx
+    push cx
+    push dx
+    push di
+
+    push cx                           ; Save original value of cx (since it will be overwritten)
+    call lba_to_chs                   ; Takes in ax as the LBA address and returns CHS (cx, dh)
+    pop ax                            ; AL = number of sectors to read (originally cl)
+
+    mov ah, 02h                       ; Required for BIOS function/interrupt
+    mov di, 3                         ; Retry read 3 times (for real hardware)
+
+.retry:
+    pusha                             ; This BIOS interrupt may mess with our registers, save them for later
+    stc                               ; Set carry flag... to check for a successful read, the carry flag will be cleared
+    int 13h                           ; Calls the BIOS read function given the args we previously supplied
+    jnc .done                         ; Jump if carry clear, success!
+
+    ; If read failed
+    popa
+    call disk_reset
+
+    dec di                            ; di--
+    test di, di                       ; Check if di == 0 (I think it performs a bitwise AND and sets the zero flag if the result is 0)
+    jnz .retry                        ; If di != 0, loop
+
+.fail:
+    jmp floppy_fail                   ; Display error message on fail
+
+.done:
+    popa
+    pop di                            ; Restore registers
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+;
+; Reset disk controller
+; Args
+;     dl - drive number
+disk_reset:
+    pusha
+    mov ah, 0                         ; Causes the disk controller to reset
+    stc
+    int 13h
+    jc floppy_fail                    ; Carry should be clear if reset was successful, otherwise jump to floppy_fail
+    popa
+    ret
+    
+
 
 ; Try to keep messages short
 msg_hello:       db 'Loading', ENDL, 0
@@ -109,5 +219,3 @@ msg_floppy_fail: db 'Disk err', ENDL, 0
 
 times 510-($-$$) db 0                 ; Pad the program so that the signature begins 511 bytes into the sector
 dw 0xAA55
-
-buffer:
